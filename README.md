@@ -11,20 +11,34 @@
 ## 安装
 
 ```sh
-# 从 npm（推荐，预构建）
-dsh plugin --profile web add dsh-plugin-registry
-
-# 或从 GitHub
-dsh plugin --profile web add github:awesome-dsh-plugin/dsh-plugin-registry
+dsh plugin --profile web add github:beancookie/dsh-plugin-registry
 ```
 
-安装后重启 `dsh web`，然后直接对 agent 说：
+安装完成后直接启动：
+
+```sh
+dsh web
+```
+
+## 使用
+
+**推荐：页面安装** —— 启动 `dsh web` 后，打开设置 → 插件 → **插件市场**，可搜索、按分类/状态筛选、一键安装/卸载，无需对话：
+
+![插件市场](images/dsh-plugin-registry.png)
+
+**备选：对话安装** —— 直接对 agent 说：
 
 - 「帮我找一个微信通知的插件」
 - 「有什么终端 TUI 插件？」
 - 「安装 dsh-pet」
 
 agent 会依次调用 `search_dsh_plugins` 检索、`install_dsh_plugin` 安装。所有插件均为第三方代码，安装前 agent 会先向你确认。
+
+## 卸载
+
+```sh
+dsh plugin --profile web remove dsh-plugin-registry
+```
 
 ## 技术方案
 
