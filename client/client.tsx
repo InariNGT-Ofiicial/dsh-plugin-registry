@@ -13,9 +13,14 @@ interface PluginHit {
   description: string
   install: string
   npm: string | null
+  stars: number | null
+  createdAt: string | null
   installed: boolean
   packageName: string | null
 }
+
+// 排序模式：相关度（默认）/ 按 Star / 按最新，与 src/registry.ts 的 SortMode 对应。
+type SortMode = 'relevance' | 'stars' | 'recent'
 
 interface InstallResult {
   ok: boolean
@@ -92,6 +97,35 @@ const STYLES = `
 }
 .dpr-search-btn:hover:not(:disabled) { opacity: .88; box-shadow: 0 2px 8px color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, transparent); }
 .dpr-search-btn:disabled { opacity: .55; cursor: default; }
+.dpr-sort { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dpr-sort-label {
+  flex-shrink: 0; font-size: 12px; line-height: 22px;
+  color: var(--dsw-alias-label-tertiary); user-select: none;
+}
+.dpr-sort-wrap { position: relative; display: inline-flex; }
+.dpr-sort-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  padding: 9px 30px 9px 12px; border-radius: 8px; font-size: 13px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.dpr-sort-select:hover { border-color: var(--dsw-alias-label-tertiary); color: var(--dsw-alias-label-primary); }
+.dpr-sort-select:focus-visible {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent);
+}
+.dpr-sort-wrap::after {
+  content: ''; position: absolute; top: 50%; right: 11px;
+  width: 6px; height: 6px; margin-top: -4px;
+  border-right: 1.5px solid var(--dsw-alias-label-tertiary);
+  border-bottom: 1.5px solid var(--dsw-alias-label-tertiary);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
 
 .dpr-filter-row { display: flex; gap: 10px; align-items: flex-start; }
 .dpr-filter-label {
@@ -188,6 +222,8 @@ const STYLES = `
   min-height: 2.4em;
 }
 .dpr-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; padding-top: 6px; }
+.dpr-card-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dpr-card-stat { font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
 .dpr-card-link {
   font-size: 12px; color: var(--dsw-alias-label-tertiary); text-decoration: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -308,15 +344,16 @@ function api(path: string, init?: RequestInit): Promise<any> {
 }
 
 interface MarketProps {
-  search: (query: string, category?: string, limit?: number) => Promise<PluginHit[]>
+  search: (query: string, category?: string, limit?: number, sort?: SortMode) => Promise<PluginHit[]>
   install: (ref: string) => Promise<InstallResult>
   uninstall: (ref: string) => Promise<UninstallResult>
 }
 
 function Market({ search, install, uninstall }: MarketProps) {
-  // 组件状态：查询词、分类、结果列表、加载/错误/通知、安装中的插件、状态筛选、确认弹窗。
+  // 组件状态：查询词、分类、排序、结果列表、加载/错误/通知、安装中的插件、状态筛选、确认弹窗。
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
+  const [sort, setSort] = useState<SortMode>('stars')
   const [items, setItems] = useState<PluginHit[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -330,12 +367,12 @@ function Market({ search, install, uninstall }: MarketProps) {
   const skipInitialDebounce = useRef(true)
 
   // 执行搜索：递增请求序号，完成后仅当仍是最新一次才更新状态。
-  const runSearch = async (q = query, c = category) => {
+  const runSearch = async (q = query, c = category, s = sort) => {
     const seq = ++searchSeq.current
     setBusy(true)
     setError(null)
     try {
-      const result = await search(q, c || undefined, 500)
+      const result = await search(q, c || undefined, 500, s)
       if (seq !== searchSeq.current) return
       setItems(result)
     } catch (e) {
@@ -367,6 +404,13 @@ function Market({ search, install, uninstall }: MarketProps) {
     if (value === category) return
     setCategory(value)
     void runSearch(query, value)
+  }
+
+  // 切换排序：立即按新排序重新搜索。
+  const onPickSort = (value: SortMode) => {
+    if (value === sort) return
+    setSort(value)
+    void runSearch(query, category, value)
   }
 
   // 安装状态由服务端在搜索时计算并随结果返回（URL 唯一身份）。
@@ -454,6 +498,21 @@ function Market({ search, install, uninstall }: MarketProps) {
             </button>
           ) : null}
         </div>
+        <label className="dpr-sort" title="排序">
+          <span className="dpr-sort-label">排序</span>
+          <span className="dpr-sort-wrap">
+            <select
+              className="dpr-sort-select"
+              aria-label="排序"
+              value={sort}
+              onChange={(e) => onPickSort(e.currentTarget.value as SortMode)}
+            >
+              <option value="relevance">相关度</option>
+              <option value="stars">按 Star</option>
+              <option value="recent">按最新</option>
+            </select>
+          </span>
+        </label>
         <button type="button" className="dpr-search-btn" onClick={() => void runSearch()} disabled={busy}>
           {busy ? '搜索中…' : '搜索'}
         </button>
@@ -561,9 +620,18 @@ function Market({ search, install, uninstall }: MarketProps) {
                   </div>
                   <div className="dpr-card-desc">{p.description}</div>
                   <div className="dpr-card-foot">
-                    <a className="dpr-card-link" href={p.url} target="_blank" rel="noreferrer" title={p.url}>
-                      {p.owner}/{p.name}
-                    </a>
+                    <div className="dpr-card-meta">
+                      <a className="dpr-card-link" href={p.url} target="_blank" rel="noreferrer" title={p.url}>
+                        {p.owner}/{p.name}
+                      </a>
+                      {p.stars != null || p.createdAt != null ? (
+                        <span className="dpr-card-stat">
+                          {p.stars != null ? `★ ${p.stars.toLocaleString()}` : ''}
+                          {p.stars != null && p.createdAt != null ? ' · ' : ''}
+                          {p.createdAt != null ? p.createdAt.replace(/-/g, '.') : ''}
+                        </span>
+                      ) : null}
+                    </div>
                     {pInstalled ? (
                       <button
                         type="button"
@@ -679,10 +747,11 @@ function ConfirmModal({ plugin, action, busy, onCancel, onConfirm }: ConfirmModa
 export function apply(ctx: Context) {
   const slots = (ctx as unknown as { slots: any }).slots
 
-  // 搜索：query/category/limit 拼进 URL 查询串，GET 宿主 /search 接口。
-  const search = (q: string, category?: string, limit = 20): Promise<PluginHit[]> => {
+  // 搜索：query/category/sort/limit 拼进 URL 查询串，GET 宿主 /search 接口。
+  const search = (q: string, category?: string, limit = 20, sort: SortMode = 'stars'): Promise<PluginHit[]> => {
     const params = new URLSearchParams({ q, limit: String(limit) })
     if (category) params.set('category', category)
+    if (sort !== 'relevance') params.set('sort', sort)
     return api(`/api/dsh-plugin-registry/search?${params.toString()}`).then((d) => d.plugins)
   }
 

@@ -1,4 +1,5 @@
 import { loadRegistry, resolvePlugin } from './registry.js'
+import type { SortMode } from './registry.js'
 import { searchHits } from './market.js'
 import type { ProfileStore } from './profile.js'
 
@@ -47,8 +48,12 @@ export function registerRoutes(webServer: WebServer, profile: ProfileStore): voi
           const registry = await loadRegistry()
           const query = url.searchParams.get('q') ?? ''
           const category = url.searchParams.get('category') ?? undefined
+          const sort = (url.searchParams.get('sort') ?? 'relevance') as SortMode
           const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit')) || 8, 500))
-          sendJson(res, 200, { ok: true, plugins: searchHits(registry, profile, query, category, limit, 'zh') })
+          sendJson(res, 200, {
+            ok: true,
+            plugins: searchHits(registry, profile, query, category, limit, 'zh', sort),
+          })
           return
         }
         // GET /installed —— 返回 registry 中所有已安装的条目。

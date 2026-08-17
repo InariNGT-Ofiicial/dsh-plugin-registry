@@ -40,10 +40,39 @@ export async function loadRegistry(): Promise<Registry> {
 }
 
 /**
- * 关键词检索：按 name/owner/description 做大小写不敏感的多关键词匹配。
- * 可选按分类过滤；排序规则是名称命中 +2 分、其余字段命中 +1 分，按总分降序。
+ * 排序模式：relevance 按关键词命中评分（名称 +2、其余字段 +1）；stars 按
+ * GitHub Star 数降序、最新按仓库创建日期降序（无数据排最后），均以名称升序兜底。
+ * 参考 awesome-dsh-plugin 站点的排序方式（stars/recent），其「分类内/全局」维度
+ * 在当前平铺 UI 中塌缩为同一行为，故只保留两种度量。
  */
-export function searchPlugins(registry: Registry, query: string, category?: string, limit = 8): RegistryPlugin[] {
+export type SortMode = 'relevance' | 'stars' | 'recent'
+
+// Star 排序：降序；缺失视为 -Infinity 排最后；同分按名称升序。
+function compareStars(a: RegistryPlugin, b: RegistryPlugin): number {
+  const sa = typeof a.stars === 'number' ? a.stars : -Infinity
+  const sb = typeof b.stars === 'number' ? b.stars : -Infinity
+  return sb - sa || a.name.localeCompare(b.name)
+}
+
+// 最新排序：按创建日期降序；缺失视为最旧排最后；同分按名称升序。
+function compareRecent(a: RegistryPlugin, b: RegistryPlugin): number {
+  const da = a.createdAt ? Date.parse(a.createdAt) : -1
+  const db = b.createdAt ? Date.parse(b.createdAt) : -1
+  return db - da || a.name.localeCompare(b.name)
+}
+
+/**
+ * 关键词检索：按 name/owner/description 做大小写不敏感的多关键词匹配。
+ * 可选按分类过滤；默认按命中评分（名称 +2 分、其余字段 +1 分）降序，也可
+ * 切换到 stars / recent 度量（见 SortMode）。
+ */
+export function searchPlugins(
+  registry: Registry,
+  query: string,
+  category?: string,
+  limit = 8,
+  sort: SortMode = 'relevance',
+): RegistryPlugin[] {
   // 把查询串拆成多个关键词，全部命中的条目才返回。
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
   const scored = registry.plugins
@@ -61,7 +90,12 @@ export function searchPlugins(registry: Registry, query: string, category?: stri
       return { p, score }
     })
     .filter((x): x is { p: RegistryPlugin; score: number } => x !== null)
-    .sort((a, b) => b.score - a.score)
+    // 相关度按评分降序；stars/recent 沿用各自度量，评分字段仅在 relevance 下生效。
+    .sort((a, b) => {
+      if (sort === 'stars') return compareStars(a.p, b.p)
+      if (sort === 'recent') return compareRecent(a.p, b.p)
+      return b.score - a.score
+    })
   // 限制返回条数（至少 1 条、最多 500 条），只取插件本体。
   return scored.slice(0, Math.max(1, Math.min(limit, 500))).map((x) => x.p)
 }

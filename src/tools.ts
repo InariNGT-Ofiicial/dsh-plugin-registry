@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { loadRegistry, resolvePlugin } from './registry.js'
+import type { SortMode } from './registry.js'
 import { searchHits } from './market.js'
 import type { ProfileStore } from './profile.js'
 import type { SearchHit } from './types.js'
@@ -10,10 +11,11 @@ function renderSearch(results: SearchHit[], note: string): string {
   if (results.length === 0) {
     return '没有匹配的插件。换更宽泛的关键词，或浏览 https://awesome-dsh-plugin.com'
   }
-  const lines = results.map(
-    (r, i) =>
-      `${i + 1}. ${r.name}${r.installed ? ' ✅ 已安装' : ''} — ${r.description}\n   ${r.url}\n   install: ${r.install}`,
-  )
+  const lines = results.map((r, i) => {
+    const meta = [r.stars != null ? `★ ${r.stars}` : null, r.createdAt ?? null].filter(Boolean).join(' · ')
+    const tag = r.installed ? ' ✅ 已安装' : ''
+    return `${i + 1}. ${r.name}${tag}${meta ? `（${meta}）` : ''} — ${r.description}\n   ${r.url}\n   install: ${r.install}`
+  })
   return lines.join('\n\n') + (note ? `\n\n${note}` : '')
 }
 
@@ -37,6 +39,10 @@ export function registerTools(ctx: Context, profile: ProfileStore): void {
         },
         limit: { type: 'number', description: '最多返回条数（默认 8，最大 20）' },
         lang: { type: 'string', description: "描述语言 'zh' 或 'en'，默认 'zh'" },
+        sort: {
+          type: 'string',
+          description: "结果排序：'relevance'（默认，按关键词命中评分）/ 'stars'（Star 降序）/ 'recent'（仓库创建日期降序）",
+        },
       },
       output: {
         schema: { type: 'object', additionalProperties: true },
@@ -52,7 +58,8 @@ export function registerTools(ctx: Context, profile: ProfileStore): void {
         const limit = Math.max(1, Math.min(args.limit ?? 8, 20))
         const category = typeof args.category === 'string' ? args.category : undefined
         const lang = args.lang === 'en' ? 'en' : 'zh'
-        const results = searchHits(registry, profile, String(args.query ?? ''), category, limit, lang)
+        const sort: SortMode = args.sort === 'stars' || args.sort === 'recent' ? args.sort : 'relevance'
+        const results = searchHits(registry, profile, String(args.query ?? ''), category, limit, lang, sort)
         return {
           results,
           note: '来源：awesome-dsh-plugin 精选列表。插件为第三方代码，安装前建议先向用户确认并审阅源码。',

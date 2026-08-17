@@ -12,14 +12,14 @@
 - `src/*.ts` 是源码；`lib/*.js` 是**由 `tsc` 生成但被提交**的产物，也是包的 `main`。切勿直接编辑 `lib/` —— 先改 `src/` 再执行 `pnpm build`。
 - 模块体系为 ESM + `moduleResolution: NodeNext`，因此相对导入**必须带 `.js` 后缀**（例如 `import { loadRegistry } from './registry.js'`）。
 - `src/index.ts` — 插件的 `apply(ctx)`；`inject = ['tools', 'loader']`。创建唯一一个 `ProfileStore`，供 HTTP API 与 DSH 工具共享（安装状态来自单一事实源），然后注册工具，并通过 `ctx.inject(['webServer'], …)` 挂载仅 Web 使用的 HTTP 路由。
-- `src/registry.ts` — 拉取/缓存远程 `plugins.json`（1 小时 TTL、4 秒超时），失败回退 `data/registry-snapshot.json`；`searchPlugins`（按 `name`/`owner`/description 排名）、`installSpec`（把 `install` 归一化为 pnpm spec，含 `github:owner/repo#path:/sub`）、`describe`、`resolvePlugin`（按 URL → name → `owner/repo` 把用户 ref 解析为唯一条目，遇到歧义时报错）。
+- `src/registry.ts` — 拉取/缓存远程 `plugins.json`（1 小时 TTL、4 秒超时），失败回退 `data/registry-snapshot.json`；`searchPlugins`（按 `name`/`owner`/description 检索，`sort` 参数支持 `relevance`/`stars`/`recent` 三种排序，默认相关度评分）、`installSpec`（把 `install` 归一化为 pnpm spec，含 `github:owner/repo#path:/sub`）、`describe`、`resolvePlugin`（按 URL → name → `owner/repo` 把用户 ref 解析为唯一条目，遇到歧义时报错）。
 - `src/profile.ts` — `ProfileStore`：发现当前 profile 目录（loader 的 `cordis:include` 配置路径，回退 `resolveProfileDir('web')`），通过 `@deepseek-ai/dsh-app-boot` 读写 profile 清单，执行 `corepack pnpm add/remove`，对账 `dsh.profile.bundles`（镜像 `dsh plugin add/remove`），并**仅依据清单**（`dependencies` + `dsh.profile.bundles`）判定安装状态，从不依赖 loader/HMR。含 `install`/`uninstall` 及 spec 归一化辅助函数。
-- `src/tools.ts` — 通过 `@deepseek-ai/dsh-tools` 的 `defineTool` 注册两个 DSH 工具：`search_dsh_plugins`（检索 + 安装状态）与 `install_dsh_plugin`（解析 + `profile.install`）。
-- `src/api.ts` — 在 `ctx.webServer` 上注册单个 `prefix` 路由 `/api/dsh-plugin-registry`：`GET …/search`、`GET …/installed`、`POST …/install`、`POST …/uninstall`，复用 `registry.ts`/`market.ts`/`profile.ts`。
-- `src/market.ts` — `searchHits`：检索 + 附加服务端算好的安装状态；HTTP API 与工具共用的同一视图。
+- `src/tools.ts` — 通过 `@deepseek-ai/dsh-tools` 的 `defineTool` 注册两个 DSH 工具：`search_dsh_plugins`（检索 + 安装状态，支持 `sort` 参数）与 `install_dsh_plugin`（解析 + `profile.install`）。
+- `src/api.ts` — 在 `ctx.webServer` 上注册单个 `prefix` 路由 `/api/dsh-plugin-registry`：`GET …/search`（支持 `sort=relevance|stars|recent`）、`GET …/installed`、`POST …/install`、`POST …/uninstall`，复用 `registry.ts`/`market.ts`/`profile.ts`。
+- `src/market.ts` — `searchHits`：检索 + 附加服务端算好的安装状态（含 `stars`/`createdAt`）；HTTP API 与工具共用的同一视图。
 - `src/types.ts` — 共享类型（`RegistryPlugin`、`SearchHit`、`InstalledEntry`、`InstallResult`、`UninstallResult`）。
-- `client/client.tsx` — 浏览器 bundle 源码：在 `settings.plugins.tab` 槽位（id `market`）注册的 React「插件市场」页面。搜索 + 分类过滤 + 已安装状态过滤 + 安装/卸载（带确认弹窗），全部通过 `fetch` 调 `/api/dsh-plugin-registry/*` 路由。由 esbuild 打包，**不是** `tsc`；无类型检查（仅 esbuild）。`react`/`react/jsx-runtime` 由 DSH web shell 提供的外部依赖。
-- `data/registry-snapshot.json` — 随包分发的离线回退（275 个插件、11 个分类）。若过期，从 `src/registry.ts` 中的远程 URL 刷新。
+- `client/client.tsx` — 浏览器 bundle 源码：在 `settings.plugins.tab` 槽位（id `market`）注册的 React「插件市场」页面。搜索 + 排序下拉（相关度/按 Star/按最新，默认按 Star 降序）+ 分类过滤 + 已安装状态过滤 + 安装/卸载（带确认弹窗），全部通过 `fetch` 调 `/api/dsh-plugin-registry/*` 路由。由 esbuild 打包，**不是** `tsc`；无类型检查（仅 esbuild）。`react`/`react/jsx-runtime` 由 DSH web shell 提供的外部依赖。
+- `data/registry-snapshot.json` — 随包分发的离线回退（336 个插件、11 个分类，含 `stars`/`createdAt`）。若过期，从 `src/registry.ts` 中的远程 URL 刷新。
 
 ## 注意事项
 

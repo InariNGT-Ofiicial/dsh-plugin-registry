@@ -9,7 +9,9 @@ export interface RegistryPlugin {
   category: string
   description: Record<string, string>
   npm: string | null
-  stars?: number
+  stars?: number | null
+  /** 仓库创建日期（YYYY-MM-DD），「最新」排序的度量；可能缺失。 */
+  createdAt?: string | null
   install: string
   added: string
 }
@@ -27,6 +29,9 @@ export type SearchHit = {
   description: string
   install: string
   npm: string | null
+  stars: number | null
+  /** 仓库创建日期（YYYY-MM-DD），可能缺失。 */
+  createdAt: string | null
   installed: boolean
   /** 已安装时的真实包名（profile 依赖名），未安装为 null。 */
   packageName: string | null
