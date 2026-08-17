@@ -1,6 +1,6 @@
 # dsh-plugin-registry
 
-一个 DeepSeek Harness（DSH）插件：在会话内直接**检索**并**安装** [awesome-dsh-plugin](https://awesome-dsh-plugin.com) 精选列表中的插件。
+一个 DeepSeek Harness（DSH）插件：在会话内直接**检索**并**安装** [awesome-dsh-plugin](https://beancookie.github.io/awesome-dsh-plugin/) 精选列表中的插件。
 
 - `search_dsh_plugins` — 按关键词/分类检索精选 registry，返回双语描述与安装命令。
 - `install_dsh_plugin` — 真正把插件装进当前 profile（corepack pnpm add + 同步 `dsh.profile.bundles`，HMR 热加载，无需重启）。
